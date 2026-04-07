@@ -1,7 +1,5 @@
 -- ================== BIẾN ==================
 _G.AutoFarm = false
-_G.AutoBoss = false
-_G.AutoNPC = false
 _G.AutoLevel = false
 _G.FastAttack = false
 
@@ -9,6 +7,15 @@ _G.SelectedMob = ""
 _G.MobList = {}
 _G.NPCList = {}
 _G.BossList = {}
+
+-- ================== SERVICES ==================
+local TweenService = game:GetService("TweenService")
+
+-- ================== SAFE CHARACTER ==================
+function GetChar()
+    local player = game.Players.LocalPlayer
+    return player.Character or player.CharacterAdded:Wait()
+end
 
 -- ================== GUI ==================
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
@@ -124,21 +131,47 @@ function createDropdown(parent, listName, title)
     end)
 end
 
--- ================== AUTO FARM LEGIT ==================
+-- ================== BAY MƯỢT ==================
+function FlyToTargetSmooth(target)
+    local char = GetChar()
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local targetPos = target.HumanoidRootPart.Position + Vector3.new(0, 10, 0)
+
+    local distance = (root.Position - targetPos).Magnitude
+    local speed = 80
+    local time = distance / speed
+
+    local tween = TweenService:Create(
+        root,
+        TweenInfo.new(time, Enum.EasingStyle.Linear),
+        {CFrame = CFrame.new(targetPos)}
+    )
+
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+-- ================== AUTO FARM ==================
 function AutoFarmLegit()
+    if _G.RunningFarm then return end
+    _G.RunningFarm = true
+
     spawn(function()
         while _G.AutoFarm do
             task.wait(math.random(4,7)/10)
 
-            local char = game.Players.LocalPlayer.Character
-            if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+            local char = GetChar()
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if not root then continue end
 
             local nearest, dist = nil, math.huge
 
             for _,v in pairs(workspace:GetDescendants()) do
                 if v.Name == _G.SelectedMob and v:FindFirstChild("HumanoidRootPart") then
-                    if v.Humanoid.Health > 0 then
-                        local d = (char.HumanoidRootPart.Position - v.HumanoidRootPart.Position).Magnitude
+                    if v.Humanoid and v.Humanoid.Health > 0 then
+                        local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
                         if d < dist then
                             dist = d
                             nearest = v
@@ -148,8 +181,7 @@ function AutoFarmLegit()
             end
 
             if nearest then
-                local offset = math.random(3,6)
-                char.HumanoidRootPart.CFrame = nearest.HumanoidRootPart.CFrame * CFrame.new(0,0,offset)
+                FlyToTargetSmooth(nearest)
 
                 task.wait(math.random(2,4)/10)
 
@@ -157,24 +189,30 @@ function AutoFarmLegit()
                 if tool then tool:Activate() end
             end
         end
+
+        _G.RunningFarm = false
     end)
 end
 
 -- ================== AUTO LEVEL ==================
 function AutoLevel()
+    if _G.RunningLevel then return end
+    _G.RunningLevel = true
+
     spawn(function()
         while _G.AutoLevel do
             task.wait(math.random(4,7)/10)
 
-            local char = game.Players.LocalPlayer.Character
-            if not char then continue end
+            local char = GetChar()
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if not root then continue end
 
             local nearest, dist = nil, math.huge
 
             for _,v in pairs(workspace:GetDescendants()) do
-                if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
-                    if not game.Players:GetPlayerFromCharacter(v) then
-                        local d = (char.HumanoidRootPart.Position - v.HumanoidRootPart.Position).Magnitude
+                if v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
+                    if not game.Players:GetPlayerFromCharacter(v) and v.Humanoid.Health > 0 then
+                        local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
                         if d < dist then
                             dist = d
                             nearest = v
@@ -184,25 +222,32 @@ function AutoLevel()
             end
 
             if nearest then
-                char.HumanoidRootPart.CFrame = nearest.HumanoidRootPart.CFrame * CFrame.new(0,0,5)
+                FlyToTargetSmooth(nearest)
+
                 local tool = char:FindFirstChildOfClass("Tool")
                 if tool then tool:Activate() end
             end
         end
+
+        _G.RunningLevel = false
     end)
 end
 
--- ================== FAST ATTACK LEGIT ==================
+-- ================== FAST ATTACK ==================
 function FastAttack()
+    if _G.RunningFast then return end
+    _G.RunningFast = true
+
     spawn(function()
         while _G.FastAttack do
             task.wait(math.random(5,8)/10)
 
-            local char = game.Players.LocalPlayer.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
-
+            local char = GetChar()
+            local tool = char:FindFirstChildOfClass("Tool")
             if tool then tool:Activate() end
         end
+
+        _G.RunningFast = false
     end)
 end
 
@@ -214,6 +259,7 @@ function createToggle(parent, name)
     Btn.BackgroundColor3 = Color3.fromRGB(50,0,0)
 
     local state = false
+
     Btn.MouseButton1Click:Connect(function()
         state = not state
         Btn.Text = name.." "..(state and "ON" or "OFF")
@@ -222,9 +268,11 @@ function createToggle(parent, name)
         if name == "Auto Farm" then
             _G.AutoFarm = state
             if state then AutoFarmLegit() end
+
         elseif name == "Auto Level" then
             _G.AutoLevel = state
             if state then AutoLevel() end
+
         elseif name == "Fast Attack" then
             _G.FastAttack = state
             if state then FastAttack() end
