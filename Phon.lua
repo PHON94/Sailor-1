@@ -17,59 +17,34 @@ function GetChar()
     return player.Character or player.CharacterAdded:Wait()
 end
 
--- ================== GUI ==================
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+-- ================== CHECK MOB CHUẨN ==================
+function IsRealMob(v)
+    if not v:IsA("Model") then return false end
 
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 420, 0, 320)
-Main.Position = UDim2.new(0.3, 0, 0.2, 0)
-Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
-Main.Active = true
-Main.Draggable = true
-Instance.new("UICorner", Main)
+    local hum = v:FindFirstChild("Humanoid")
+    local root = v:FindFirstChild("HumanoidRootPart")
 
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1,0,0,35)
-Title.Text = "LEGIT MENU"
-Title.BackgroundColor3 = Color3.fromRGB(15,15,15)
-Title.TextColor3 = Color3.new(1,1,1)
+    if not hum or not root then return false end
 
-local Tabs = Instance.new("Frame", Main)
-Tabs.Size = UDim2.new(0,120,1,-35)
-Tabs.Position = UDim2.new(0,0,0,35)
-Tabs.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    -- ❌ bỏ player
+    if game.Players:GetPlayerFromCharacter(v) then return false end
 
-local Content = Instance.new("Frame", Main)
-Content.Size = UDim2.new(1,-120,1,-35)
-Content.Position = UDim2.new(0,120,0,35)
-Content.BackgroundTransparency = 1
+    local name = v.Name:lower()
 
-Instance.new("UIListLayout", Tabs).Padding = UDim.new(0,5)
+    -- ❌ bỏ shop / npc bán đồ
+    if string.find(name,"shop") or string.find(name,"seller") then
+        return false
+    end
 
--- ================== TAB ==================
-function createTab(name)
-    local Btn = Instance.new("TextButton", Tabs)
-    Btn.Size = UDim2.new(1,0,0,35)
-    Btn.Text = name
-    Btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    Btn.TextColor3 = Color3.new(1,1,1)
-    Instance.new("UICorner", Btn)
+    -- ❌ bỏ object chết
+    if hum.Health <= 0 then return false end
 
-    local Frame = Instance.new("ScrollingFrame", Content)
-    Frame.Size = UDim2.new(1,0,1,0)
-    Frame.Visible = false
-    Frame.CanvasSize = UDim2.new(0,0,2,0)
-    Frame.BackgroundTransparency = 1
-    Instance.new("UIListLayout", Frame).Padding = UDim.new(0,5)
+    -- ❌ bỏ npc đứng im (không phải boss)
+    if hum.WalkSpeed == 0 and not string.find(name,"boss") then
+        return false
+    end
 
-    Btn.MouseButton1Click:Connect(function()
-        for _,v in pairs(Content:GetChildren()) do
-            if v:IsA("ScrollingFrame") then v.Visible = false end
-        end
-        Frame.Visible = true
-    end)
-
-    return Frame
+    return true
 end
 
 -- ================== SCAN MOB ==================
@@ -77,18 +52,28 @@ function ScanMobs()
     _G.MobList, _G.NPCList, _G.BossList = {}, {}, {}
 
     for _,v in pairs(workspace:GetDescendants()) do
-        if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+        if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
             
             if game.Players:GetPlayerFromCharacter(v) then continue end
 
-            if string.find(v.Name,"Boss") then
-                if not table.find(_G.BossList,v.Name) then table.insert(_G.BossList,v.Name) end
+            local name = v.Name
+
+            if string.find(name:lower(),"boss") then
+                if not table.find(_G.BossList,name) then
+                    table.insert(_G.BossList,name)
+                end
 
             elseif v.Humanoid.WalkSpeed == 0 then
-                if not table.find(_G.NPCList,v.Name) then table.insert(_G.NPCList,v.Name) end
+                if not string.find(name:lower(),"shop") then
+                    if not table.find(_G.NPCList,name) then
+                        table.insert(_G.NPCList,name)
+                    end
+                end
 
-            else
-                if not table.find(_G.MobList,v.Name) then table.insert(_G.MobList,v.Name) end
+            elseif IsRealMob(v) then
+                if not table.find(_G.MobList,name) then
+                    table.insert(_G.MobList,name)
+                end
             end
         end
     end
@@ -137,10 +122,10 @@ function FlyToTargetSmooth(target)
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    local targetPos = target.HumanoidRootPart.Position + Vector3.new(0, 10, 0)
+    local targetPos = target.HumanoidRootPart.Position + Vector3.new(0, 7, 4)
 
     local distance = (root.Position - targetPos).Magnitude
-    local speed = 80
+    local speed = 100
     local time = distance / speed
 
     local tween = TweenService:Create(
@@ -169,13 +154,11 @@ function AutoFarmLegit()
             local nearest, dist = nil, math.huge
 
             for _,v in pairs(workspace:GetDescendants()) do
-                if v.Name == _G.SelectedMob and v:FindFirstChild("HumanoidRootPart") then
-                    if v.Humanoid and v.Humanoid.Health > 0 then
-                        local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
-                        if d < dist then
-                            dist = d
-                            nearest = v
-                        end
+                if IsRealMob(v) and v.Name == _G.SelectedMob then
+                    local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
+                    if d < dist then
+                        dist = d
+                        nearest = v
                     end
                 end
             end
@@ -183,7 +166,10 @@ function AutoFarmLegit()
             if nearest then
                 FlyToTargetSmooth(nearest)
 
-                task.wait(math.random(2,4)/10)
+                -- 🔥 quay mặt vào quái
+                root.CFrame = CFrame.new(root.Position, nearest.HumanoidRootPart.Position)
+
+                task.wait(0.2)
 
                 local tool = char:FindFirstChildOfClass("Tool")
                 if tool then tool:Activate() end
@@ -210,19 +196,19 @@ function AutoLevel()
             local nearest, dist = nil, math.huge
 
             for _,v in pairs(workspace:GetDescendants()) do
-                if v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
-                    if not game.Players:GetPlayerFromCharacter(v) and v.Humanoid.Health > 0 then
-                        local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
-                        if d < dist then
-                            dist = d
-                            nearest = v
-                        end
+                if IsRealMob(v) then
+                    local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
+                    if d < dist then
+                        dist = d
+                        nearest = v
                     end
                 end
             end
 
             if nearest then
                 FlyToTargetSmooth(nearest)
+
+                root.CFrame = CFrame.new(root.Position, nearest.HumanoidRootPart.Position)
 
                 local tool = char:FindFirstChildOfClass("Tool")
                 if tool then tool:Activate() end
@@ -251,19 +237,56 @@ function FastAttack()
     end)
 end
 
--- ================== TOGGLE ==================
+-- ================== GUI ==================
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 420, 0, 320)
+Main.Position = UDim2.new(0.3, 0, 0.2, 0)
+Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Main.Active = true
+Main.Draggable = true
+Instance.new("UICorner", Main)
+
+local Tabs = Instance.new("Frame", Main)
+Tabs.Size = UDim2.new(0,120,1,0)
+Tabs.BackgroundColor3 = Color3.fromRGB(20,20,20)
+
+local Content = Instance.new("Frame", Main)
+Content.Size = UDim2.new(1,-120,1,0)
+Content.Position = UDim2.new(0,120,0,0)
+
+Instance.new("UIListLayout", Tabs)
+
+function createTab(name)
+    local Btn = Instance.new("TextButton", Tabs)
+    Btn.Size = UDim2.new(1,0,0,35)
+    Btn.Text = name
+
+    local Frame = Instance.new("Frame", Content)
+    Frame.Size = UDim2.new(1,0,1,0)
+    Frame.Visible = false
+    Instance.new("UIListLayout", Frame)
+
+    Btn.MouseButton1Click:Connect(function()
+        for _,v in pairs(Content:GetChildren()) do
+            v.Visible = false
+        end
+        Frame.Visible = true
+    end)
+
+    return Frame
+end
+
 function createToggle(parent, name)
     local Btn = Instance.new("TextButton", parent)
-    Btn.Size = UDim2.new(1,-10,0,40)
+    Btn.Size = UDim2.new(1,0,0,40)
     Btn.Text = name.." OFF"
-    Btn.BackgroundColor3 = Color3.fromRGB(50,0,0)
 
     local state = false
-
     Btn.MouseButton1Click:Connect(function()
         state = not state
         Btn.Text = name.." "..(state and "ON" or "OFF")
-        Btn.BackgroundColor3 = state and Color3.fromRGB(0,150,0) or Color3.fromRGB(50,0,0)
 
         if name == "Auto Farm" then
             _G.AutoFarm = state
@@ -292,13 +315,3 @@ createToggle(FarmTab,"Auto Level")
 createDropdown(FarmTab,"MobList","Chọn Mob")
 createDropdown(FarmTab,"BossList","Chọn Boss")
 createDropdown(FarmTab,"NPCList","Chọn NPC")
-
--- BUTTON TOGGLE UI
-local ToggleUI = Instance.new("TextButton", ScreenGui)
-ToggleUI.Size = UDim2.new(0,50,0,50)
-ToggleUI.Position = UDim2.new(0,10,0.5,0)
-ToggleUI.Text = "UI"
-
-ToggleUI.MouseButton1Click:Connect(function()
-    Main.Visible = not Main.Visible
-end)
