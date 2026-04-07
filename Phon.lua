@@ -4,9 +4,6 @@ _G.AutoLevel = false
 _G.FastAttack = false
 
 _G.SelectedMob = ""
-_G.MobList = {}
-_G.NPCList = {}
-_G.BossList = {}
 
 -- ================== SERVICES ==================
 local TweenService = game:GetService("TweenService")
@@ -17,7 +14,7 @@ function GetChar()
     return player.Character or player.CharacterAdded:Wait()
 end
 
--- ================== CHECK MOB CHUẨN ==================
+-- ================== CHECK MOB ==================
 function IsRealMob(v)
     if not v:IsA("Model") then return false end
 
@@ -26,94 +23,30 @@ function IsRealMob(v)
 
     if not hum or not root then return false end
 
-    -- ❌ bỏ player
+    -- bỏ player
     if game.Players:GetPlayerFromCharacter(v) then return false end
 
     local name = v.Name:lower()
 
-    -- ❌ bỏ shop / npc bán đồ
-    if string.find(name,"shop") or string.find(name,"seller") then
+    -- ❌ bỏ NPC shop / bán kiếm
+    if string.find(name,"shop") 
+    or string.find(name,"seller") 
+    or string.find(name,"weapon") 
+    or string.find(name,"sword") 
+    or string.find(name,"store") 
+    or string.find(name,"blacksmith") then
         return false
     end
 
-    -- ❌ bỏ object chết
+    -- ❌ có prompt → thường là NPC
+    if v:FindFirstChildOfClass("ProximityPrompt") then
+        return false
+    end
+
     if hum.Health <= 0 then return false end
-
-    -- ❌ bỏ npc đứng im (không phải boss)
-    if hum.WalkSpeed == 0 and not string.find(name,"boss") then
-        return false
-    end
+    if hum.WalkSpeed == 0 then return false end
 
     return true
-end
-
--- ================== SCAN MOB ==================
-function ScanMobs()
-    _G.MobList, _G.NPCList, _G.BossList = {}, {}, {}
-
-    for _,v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
-            
-            if game.Players:GetPlayerFromCharacter(v) then continue end
-
-            local name = v.Name
-
-            if string.find(name:lower(),"boss") then
-                if not table.find(_G.BossList,name) then
-                    table.insert(_G.BossList,name)
-                end
-
-            elseif v.Humanoid.WalkSpeed == 0 then
-                if not string.find(name:lower(),"shop") then
-                    if not table.find(_G.NPCList,name) then
-                        table.insert(_G.NPCList,name)
-                    end
-                end
-
-            elseif IsRealMob(v) then
-                if not table.find(_G.MobList,name) then
-                    table.insert(_G.MobList,name)
-                end
-            end
-        end
-    end
-end
-
--- ================== DROPDOWN ==================
-function createDropdown(parent, listName, title)
-    local Btn = Instance.new("TextButton", parent)
-    Btn.Size = UDim2.new(1,-10,0,40)
-    Btn.Text = title
-    Btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    Btn.TextColor3 = Color3.new(1,1,1)
-
-    local ListFrame = Instance.new("Frame", parent)
-    ListFrame.Size = UDim2.new(1,-10,0,120)
-    ListFrame.Visible = false
-    ListFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    Instance.new("UIListLayout", ListFrame)
-
-    Btn.MouseButton1Click:Connect(function()
-        ListFrame.Visible = not ListFrame.Visible
-
-        for _,v in pairs(ListFrame:GetChildren()) do
-            if v:IsA("TextButton") then v:Destroy() end
-        end
-
-        ScanMobs()
-
-        for _,mob in pairs(_G[listName]) do
-            local Item = Instance.new("TextButton", ListFrame)
-            Item.Size = UDim2.new(1,0,0,30)
-            Item.Text = mob
-
-            Item.MouseButton1Click:Connect(function()
-                _G.SelectedMob = mob
-                Btn.Text = mob
-                ListFrame.Visible = false
-            end)
-        end
-    end)
 end
 
 -- ================== BAY MƯỢT ==================
@@ -138,6 +71,25 @@ function FlyToTargetSmooth(target)
     tween.Completed:Wait()
 end
 
+-- ================== AUTO REACT HIT ==================
+function AutoReactHit()
+    local char = GetChar()
+    local hum = char:FindFirstChild("Humanoid")
+
+    if not hum then return end
+
+    hum.HealthChanged:Connect(function()
+        if _G.AutoFarm or _G.AutoLevel then
+            local tool = char:FindFirstChildOfClass("Tool")
+            if tool then
+                tool:Activate()
+            end
+        end
+    end)
+end
+
+AutoReactHit()
+
 -- ================== AUTO FARM ==================
 function AutoFarmLegit()
     if _G.RunningFarm then return end
@@ -156,7 +108,7 @@ function AutoFarmLegit()
             for _,v in pairs(workspace:GetDescendants()) do
                 if IsRealMob(v) and v.Name == _G.SelectedMob then
                     local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
-                    if d < dist then
+                    if d < dist and d < 300 then
                         dist = d
                         nearest = v
                     end
@@ -166,7 +118,6 @@ function AutoFarmLegit()
             if nearest then
                 FlyToTargetSmooth(nearest)
 
-                -- 🔥 quay mặt vào quái
                 root.CFrame = CFrame.new(root.Position, nearest.HumanoidRootPart.Position)
 
                 task.wait(0.2)
@@ -198,7 +149,7 @@ function AutoLevel()
             for _,v in pairs(workspace:GetDescendants()) do
                 if IsRealMob(v) then
                     local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
-                    if d < dist then
+                    if d < dist and d < 300 then
                         dist = d
                         nearest = v
                     end
@@ -241,45 +192,16 @@ end
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 420, 0, 320)
-Main.Position = UDim2.new(0.3, 0, 0.2, 0)
+Main.Size = UDim2.new(0, 400, 0, 300)
+Main.Position = UDim2.new(0.3,0,0.2,0)
 Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
 Main.Active = true
 Main.Draggable = true
-Instance.new("UICorner", Main)
 
-local Tabs = Instance.new("Frame", Main)
-Tabs.Size = UDim2.new(0,120,1,0)
-Tabs.BackgroundColor3 = Color3.fromRGB(20,20,20)
+local UIList = Instance.new("UIListLayout", Main)
 
-local Content = Instance.new("Frame", Main)
-Content.Size = UDim2.new(1,-120,1,0)
-Content.Position = UDim2.new(0,120,0,0)
-
-Instance.new("UIListLayout", Tabs)
-
-function createTab(name)
-    local Btn = Instance.new("TextButton", Tabs)
-    Btn.Size = UDim2.new(1,0,0,35)
-    Btn.Text = name
-
-    local Frame = Instance.new("Frame", Content)
-    Frame.Size = UDim2.new(1,0,1,0)
-    Frame.Visible = false
-    Instance.new("UIListLayout", Frame)
-
-    Btn.MouseButton1Click:Connect(function()
-        for _,v in pairs(Content:GetChildren()) do
-            v.Visible = false
-        end
-        Frame.Visible = true
-    end)
-
-    return Frame
-end
-
-function createToggle(parent, name)
-    local Btn = Instance.new("TextButton", parent)
+function createToggle(name, callback)
+    local Btn = Instance.new("TextButton", Main)
     Btn.Size = UDim2.new(1,0,0,40)
     Btn.Text = name.." OFF"
 
@@ -287,31 +209,21 @@ function createToggle(parent, name)
     Btn.MouseButton1Click:Connect(function()
         state = not state
         Btn.Text = name.." "..(state and "ON" or "OFF")
-
-        if name == "Auto Farm" then
-            _G.AutoFarm = state
-            if state then AutoFarmLegit() end
-
-        elseif name == "Auto Level" then
-            _G.AutoLevel = state
-            if state then AutoLevel() end
-
-        elseif name == "Fast Attack" then
-            _G.FastAttack = state
-            if state then FastAttack() end
-        end
+        callback(state)
     end)
 end
 
--- ================== MENU ==================
-local MainTab = createTab("Main")
-local FarmTab = createTab("Farm")
-MainTab.Visible = true
+createToggle("Auto Farm", function(v)
+    _G.AutoFarm = v
+    if v then AutoFarmLegit() end
+end)
 
-createToggle(MainTab,"Fast Attack")
-createToggle(FarmTab,"Auto Farm")
-createToggle(FarmTab,"Auto Level")
+createToggle("Auto Level", function(v)
+    _G.AutoLevel = v
+    if v then AutoLevel() end
+end)
 
-createDropdown(FarmTab,"MobList","Chọn Mob")
-createDropdown(FarmTab,"BossList","Chọn Boss")
-createDropdown(FarmTab,"NPCList","Chọn NPC")
+createToggle("Fast Attack", function(v)
+    _G.FastAttack = v
+    if v then FastAttack() end
+end)
